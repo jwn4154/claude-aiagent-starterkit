@@ -5,8 +5,6 @@ client-side 파일 도구의 보안 패턴을 보여주는 예제 — 모델이 
 벗어나면(경로 순회 공격 등) 거부한다.
 """
 
-from pathlib import Path
-
 from langchain_core.tools import tool
 
 from src.config import WORKSPACE_DIR

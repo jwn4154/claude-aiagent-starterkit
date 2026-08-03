@@ -29,6 +29,14 @@ streamlit run app.py
 
 `TAVILY_API_KEY`를 설정하지 않으면 웹 검색 도구는 안내 메시지만 반환하고, 나머지 기능(계산기, 파일 읽기)은 정상 동작합니다.
 
+### 선택적 환경변수
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `RECURSION_LIMIT` | `25` | `call_model ↔ tools` 최대 왕복 횟수. 모델이 도구 호출을 무한 반복하는 걸 방지하는 안전장치 |
+| `CHECKPOINTER_BACKEND` | `memory` | `sqlite`로 바꾸면 대화 기록을 `checkpoints.db` 파일에 영속 저장 (재시작해도 유지) |
+| `LANGCHAIN_TRACING_V2` | (미설정) | `true`로 설정하면 [LangSmith](https://smith.langchain.com)에서 도구 호출/토큰/비용을 자동으로 추적. `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`와 함께 설정 |
+
 ## 아키텍처
 
 에이전트는 "모델 호출 ↔ 도구 실행"을 반복하는 LangGraph 상태 그래프입니다.
@@ -44,7 +52,8 @@ graph LR
 - `call_model`: `ChatOpenAI`에 도구 3개를 `bind_tools()`로 연결해 호출
 - `tools`: `langgraph.prebuilt.ToolNode`가 모델이 요청한 도구를 실제로 실행
 - 라우팅은 `langgraph.prebuilt.tools_condition`(공식 헬퍼)이 담당 — 도구 호출 요청이 있으면 `tools`로, 없으면 종료
-- `InMemorySaver` 체크포인터가 `thread_id` 기준으로 대화 맥락을 유지 (CLI는 고정된 `"cli-session"`, Streamlit은 브라우저 세션마다 새 UUID)
+- 체크포인터가 `thread_id` 기준으로 대화 맥락을 유지 (CLI는 고정된 `"cli-session"`, Streamlit은 브라우저 세션마다 새 UUID). 기본은 `InMemorySaver`, `CHECKPOINTER_BACKEND=sqlite`로 `SqliteSaver` 전환 가능
+- `main.py`/`app.py`는 `graph.invoke()`가 아니라 `graph.stream(..., stream_mode="messages")`로 토큰을 실시간 출력한다. `AIMessageChunk`를 `chunk_position == "last"`가 될 때까지 누적해 `tool_calls`를 재구성하는 [LangChain 공식 스트리밍 패턴](https://docs.langchain.com/oss/python/langchain/streaming)을 따른다
 
 ## 예제 도구 3개
 
@@ -53,6 +62,16 @@ graph LR
 | `src/tools/calculator.py` | `calculator` | 외부 의존성 없음. `eval()` 대신 `ast` 기반 안전한 파서 사용 |
 | `src/tools/web_search.py` | `web_search` | Tavily API 호출. API 키 없으면 안내 메시지 반환 |
 | `src/tools/file_tools.py` | `read_local_file` | `./workspace` 디렉터리로 샌드박싱, 경로 순회 공격(`../` 등) 차단 |
+
+## 테스트 & 린트
+
+```bash
+pip install -r requirements-dev.txt
+pytest      # 도구 단위 테스트 (calculator, read_local_file의 경로 탈출 방지 등)
+ruff check .
+```
+
+`.github/workflows/ci.yml`이 push/PR마다 동일하게 실행합니다. API 키 없이도 통과합니다(모델을 호출하지 않는 순수 함수만 테스트).
 
 ## 새 도구 추가하는 법
 
@@ -77,5 +96,5 @@ LangGraph/LangChain은 provider-agnostic이라 모델 부분만 교체하면 됩
 
 ## 제약사항
 
-- `InMemorySaver`는 프로세스 메모리에만 저장되는 **데모/개발용** 체크포인터입니다. 프로세스를 재시작하면 대화 기록이 사라집니다. 프로덕션에서는 `PostgresSaver` 등 영속 저장소로 교체하세요.
+- 기본 체크포인터(`InMemorySaver`)는 프로세스 메모리에만 저장되는 **데모/개발용**입니다. 재시작하면 대화가 사라집니다. `CHECKPOINTER_BACKEND=sqlite`로 로컬 파일 영속화는 가능하지만, 여러 서버 인스턴스가 상태를 공유해야 하는 진짜 프로덕션 환경이라면 `PostgresSaver` 등으로 교체하세요.
 - 인증, 데이터베이스, 배포 설정은 이 스타터킷 범위 밖입니다.

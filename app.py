@@ -8,7 +8,7 @@ import uuid
 
 import streamlit as st
 
-from src.config import OPENAI_MODEL
+from src.config import OPENAI_MODEL, RECURSION_LIMIT
 from src.graph import build_graph
 
 
@@ -41,24 +41,37 @@ if user_input := st.chat_input("메시지를 입력하세요"):
         st.markdown(user_input)
 
     graph = get_graph()
-    config = {"configurable": {"thread_id": st.session_state.thread_id}}
+    config = {
+        "configurable": {"thread_id": st.session_state.thread_id},
+        "recursion_limit": RECURSION_LIMIT,
+    }
 
     with st.chat_message("assistant"):
-        prior_state = graph.get_state(config)
-        prior_count = len(prior_state.values.get("messages", []))
+        tool_calls_seen = []
 
-        result = graph.invoke({"messages": [("user", user_input)]}, config=config)
-        new_messages = result["messages"][prior_count:]
+        def _stream_tokens():
+            # stream_mode="messages": call_model이 만드는 토큰을 실시간으로 yield한다.
+            # chunk_position == "last"는 메시지의 마지막 조각이라는 뜻으로, 이 시점에
+            # tool_calls가 완전히 조립되어 있다(LangChain 공식 스트리밍 패턴).
+            pending_call = None
+            for chunk, metadata in graph.stream(
+                {"messages": [("user", user_input)]},
+                config=config,
+                stream_mode="messages",
+            ):
+                if metadata.get("langgraph_node") != "call_model":
+                    continue
+                pending_call = chunk if pending_call is None else pending_call + chunk
+                if chunk.content:
+                    yield chunk.content
+                if chunk.chunk_position == "last":
+                    tool_calls_seen.extend(pending_call.tool_calls)
+                    pending_call = None
 
-        for message in new_messages:
-            tool_calls = getattr(message, "tool_calls", None)
-            if tool_calls:
-                for call in tool_calls:
-                    with st.expander(f"🔧 도구 호출: {call['name']}"):
-                        st.json(call["args"])
+        final_text = st.write_stream(_stream_tokens)
 
-        final_message = result["messages"][-1]
-        st.markdown(final_message.content)
-        st.session_state.messages.append(
-            {"role": "assistant", "content": final_message.content}
-        )
+        for call in tool_calls_seen:
+            with st.expander(f"🔧 도구 호출: {call['name']}"):
+                st.json(call["args"])
+
+        st.session_state.messages.append({"role": "assistant", "content": final_text})

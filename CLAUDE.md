@@ -19,7 +19,15 @@ python main.py           # CLI
 streamlit run app.py     # web UI
 ```
 
-There is no test suite, linter, or build step configured in this repository.
+```bash
+pip install -r requirements-dev.txt
+pytest          # unit tests for src/tools (pure functions, no API key needed)
+ruff check .
+```
+
+`.github/workflows/ci.yml` runs the same lint+test steps on push/PR.
+
+Optional env vars (see `.env.example`): `RECURSION_LIMIT` (default 25, caps `call_model ↔ tools` round-trips), `CHECKPOINTER_BACKEND` (`memory` default or `sqlite`), `LANGCHAIN_TRACING_V2`/`LANGCHAIN_API_KEY`/`LANGCHAIN_PROJECT` (LangSmith tracing, auto-detected by LangChain — no code changes needed).
 
 ## Architecture
 
@@ -29,10 +37,11 @@ The agent is a LangGraph `StateGraph` that alternates between calling the model 
 call_model → (has tool_calls?) → tools → call_model → ... → END
 ```
 
-- `src/graph.py` — `build_graph()` is the single source of truth for the agent graph. Both `main.py` (CLI) and `app.py` (Streamlit) call this same function so agent logic is never duplicated between entry points. The graph must be built once and reused (not rebuilt per request) because the `InMemorySaver` checkpointer is bound to the graph instance — rebuilding it loses conversation history.
-- `src/config.py` — loads `.env` and exposes shared constants (`OPENAI_MODEL`, `MAX_TOKENS`, `WORKSPACE_DIR`, etc.). Both entry points import from here instead of reading env vars directly.
+- `src/graph.py` — `build_graph()` is the single source of truth for the agent graph. Both `main.py` (CLI) and `app.py` (Streamlit) call this same function so agent logic is never duplicated between entry points. The graph must be built once and reused (not rebuilt per request) because the checkpointer is bound to the graph instance — rebuilding it loses conversation history.
+- `src/config.py` — loads `.env` and exposes shared constants (`OPENAI_MODEL`, `MAX_TOKENS`, `WORKSPACE_DIR`, `RECURSION_LIMIT`, `CHECKPOINTER_BACKEND`, etc.). Both entry points import from here instead of reading env vars directly.
 - Routing between `call_model` and `tools` uses LangGraph's prebuilt `tools_condition` helper rather than a custom conditional function.
-- Conversation state is kept by `InMemorySaver`, keyed by `thread_id` — the CLI uses a fixed `"cli-session"` id, Streamlit generates a new UUID per browser session. This is in-memory only (lost on process restart); swap in `PostgresSaver` for persistence.
+- Conversation state is kept by a checkpointer, keyed by `thread_id` — the CLI uses a fixed `"cli-session"` id, Streamlit generates a new UUID per browser session. `_build_checkpointer()` in `graph.py` picks `InMemorySaver` (default, lost on restart) or `SqliteSaver` (`CHECKPOINTER_BACKEND=sqlite`, persists to `checkpoints.db`) based on config.
+- `main.py`/`app.py` call `graph.stream(..., stream_mode="messages")` rather than `graph.invoke()`, so model tokens print as they're generated. Each yielded `(chunk, metadata)` pair is filtered by `metadata["langgraph_node"] == "call_model"`; chunks are accumulated with `+` until `chunk.chunk_position == "last"`, at which point the accumulated message's `.tool_calls` are fully assembled — this is LangChain's documented pattern for reconstructing tool calls from a token stream (see `docs.langchain.com/oss/python/langchain/streaming`). A newer `stream_events(version="v3")` + `ToolCallTransformer` API exists in the installed LangGraph version but is still marked experimental, so it was deliberately not used here.
 
 ## Tools (`src/tools/`)
 
@@ -46,6 +55,7 @@ Three example tools are registered in `src/tools/__init__.py`'s `ALL_TOOLS` list
 
 ## Known constraints
 
-- `InMemorySaver` is a demo/dev-only checkpointer; conversation history does not survive a process restart.
+- The default checkpointer (`InMemorySaver`) is demo/dev-only; conversation history does not survive a process restart. `CHECKPOINTER_BACKEND=sqlite` persists locally but isn't a multi-instance production solution — use `PostgresSaver` for that.
 - No auth, database, or deployment configuration is in scope for this starter kit.
 - Claude Opus 5, if swapped in per the README, rejects `temperature`/`top_p`/`top_k` params (400 error) — the codebase already avoids setting these for either provider.
+- Tool-calling decisions are non-deterministic: the model may or may not call a tool for the same or a similar vague prompt (e.g. it sometimes skips `web_search` for an underspecified query like "오늘 날씨 어때" with no location). This is inherent LLM behavior, not a bug in the graph or streaming code.

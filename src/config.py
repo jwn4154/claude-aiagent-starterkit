@@ -23,3 +23,14 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 # file_tools 도구가 접근을 허용하는 유일한 디렉터리.
 # 모델이 임의 경로(../etc/passwd 등)를 요청해도 이 루트 밖으로 못 나가게 강제한다.
 WORKSPACE_DIR = (Path(__file__).resolve().parent.parent / "workspace").resolve()
+
+# call_model ↔ tools 사이를 오가는 최대 횟수. 모델이 도구 호출을 무한 반복하는
+# 경우(예: 같은 도구를 계속 잘못된 인자로 호출) 대비한 안전장치다.
+RECURSION_LIMIT = int(os.getenv("RECURSION_LIMIT", "25"))
+
+# 체크포인터 백엔드 선택: "memory"(기본값, 프로세스 재시작 시 대화 소실)
+# 또는 "sqlite"(로컬 파일에 영속 저장, 재시작해도 대화 유지).
+CHECKPOINTER_BACKEND = os.getenv("CHECKPOINTER_BACKEND", "memory")
+CHECKPOINTER_SQLITE_PATH = str(
+    Path(__file__).resolve().parent.parent / "checkpoints.db"
+)

@@ -5,13 +5,35 @@ CLI(main.py)와 Streamlit UI(app.py)가 build_graph()를 공용으로 사용해�
 에이전트 로직이 두 곳에 중복되지 않게 한다.
 """
 
+import sqlite3
+
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from src.config import MAX_TOKENS, OPENAI_MODEL
+from src.config import (
+    CHECKPOINTER_BACKEND,
+    CHECKPOINTER_SQLITE_PATH,
+    MAX_TOKENS,
+    OPENAI_MODEL,
+)
 from src.tools import ALL_TOOLS
+
+
+def _build_checkpointer():
+    """CHECKPOINTER_BACKEND 설정에 따라 체크포인터를 만든다.
+
+    "sqlite"면 로컬 파일(checkpoints.db)에 영속 저장해 재시작해도 대화가
+    유지된다. check_same_thread=False가 필요한 이유: Streamlit은 요청마다
+    다른 스레드에서 이 커넥션을 재사용하기 때문이다.
+    기본값 "memory"는 프로세스 메모리에만 저장되는 데모/개발용이다.
+    """
+    if CHECKPOINTER_BACKEND == "sqlite":
+        conn = sqlite3.connect(CHECKPOINTER_SQLITE_PATH, check_same_thread=False)
+        return SqliteSaver(conn)
+    return InMemorySaver()
 
 
 def build_graph():
@@ -37,7 +59,5 @@ def build_graph():
     graph_builder.add_conditional_edges("call_model", tools_condition)
     graph_builder.add_edge("tools", "call_model")
 
-    # InMemorySaver는 프로세스 메모리에만 저장되는 데모/개발용 체크포인터다.
-    # 재시작하면 대화가 사라지며, 프로덕션에서는 PostgresSaver 등으로 교체해야 한다.
-    checkpointer = InMemorySaver()
+    checkpointer = _build_checkpointer()
     return graph_builder.compile(checkpointer=checkpointer)

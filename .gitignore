@@ -7,6 +7,11 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# SqliteSaver 체크포인터 (CHECKPOINTER_BACKEND=sqlite일 때 생성됨)
+checkpoints.db
 
 # 샌드박스 작업 디렉터리 — file_tools 도구가 읽는 파일이 쌓이는 곳
 workspace/*
@@ -15,3 +20,6 @@ workspace/*
 # IDE
 .vscode/
 .idea/
+
+# Playwright MCP 테스트 산출물
+.playwright-mcp/
