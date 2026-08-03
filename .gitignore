@@ -1,0 +1,17 @@
+# 환경변수 (API 키 등 비밀값)
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# 샌드박스 작업 디렉터리 — file_tools 도구가 읽는 파일이 쌓이는 곳
+workspace/*
+!workspace/.gitkeep
+
+# IDE
+.vscode/
+.idea/
