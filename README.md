@@ -49,19 +49,20 @@ graph LR
     Tools --> CallModel
 ```
 
-- `call_model`: `ChatOpenAI`에 도구 3개를 `bind_tools()`로 연결해 호출
+- `call_model`: `ChatOpenAI`에 도구 4개를 `bind_tools()`로 연결해 호출
 - `tools`: `langgraph.prebuilt.ToolNode`가 모델이 요청한 도구를 실제로 실행
 - 라우팅은 `langgraph.prebuilt.tools_condition`(공식 헬퍼)이 담당 — 도구 호출 요청이 있으면 `tools`로, 없으면 종료
 - 체크포인터가 `thread_id` 기준으로 대화 맥락을 유지 (CLI는 고정된 `"cli-session"`, Streamlit은 브라우저 세션마다 새 UUID). 기본은 `InMemorySaver`, `CHECKPOINTER_BACKEND=sqlite`로 `SqliteSaver` 전환 가능
 - `main.py`/`app.py`는 `graph.invoke()`가 아니라 `graph.stream(..., stream_mode="messages")`로 토큰을 실시간 출력한다. `AIMessageChunk`를 `chunk_position == "last"`가 될 때까지 누적해 `tool_calls`를 재구성하는 [LangChain 공식 스트리밍 패턴](https://docs.langchain.com/oss/python/langchain/streaming)을 따른다
 
-## 예제 도구 3개
+## 예제 도구 4개
 
 | 파일 | 도구 | 특징 |
 |---|---|---|
 | `src/tools/calculator.py` | `calculator` | 외부 의존성 없음. `eval()` 대신 `ast` 기반 안전한 파서 사용 |
 | `src/tools/web_search.py` | `web_search` | Tavily API 호출. API 키 없으면 안내 메시지 반환 |
 | `src/tools/file_tools.py` | `read_local_file` | `./workspace` 디렉터리로 샌드박싱, 경로 순회 공격(`../` 등) 차단 |
+| `src/tools/time.py` | `get_current_time` | 외부 의존성 없음. 표준 라이브러리 `zoneinfo`로 타임존별 현재 시각 반환 |
 
 ## 테스트 & 린트
 
@@ -78,6 +79,25 @@ ruff check .
 1. `src/tools/`에 새 파일을 만들고 `@tool` 데코레이터로 함수를 정의합니다 (기존 도구 참고).
 2. `src/tools/__init__.py`의 import와 `ALL_TOOLS` 리스트에 추가합니다.
 3. 끝입니다 — `graph.py`는 `ALL_TOOLS`를 그대로 참조하므로 별도 수정이 필요 없습니다.
+
+바로 위 3단계를 자동화한 Claude Code 커스텀 커맨드가 `/add-tool`입니다. 아래 참고.
+
+## Claude Code 커스텀 커맨드
+
+`.claude/commands/`에 이 프로젝트 전용 슬래시 커맨드 3개가 있습니다. Claude Code에서 그대로 입력하면 실행됩니다.
+
+| 커맨드 | 설명 |
+|---|---|
+| `/add-tool <이름> <설명>` | 기존 도구(`calculator`/`web_search`/`file_tools`) 관례를 따라 `src/tools/<이름>.py` 생성, `ALL_TOOLS` 등록, `tests/test_<이름>.py` 작성까지 한 번에 수행. 위 "새 도구 추가하는 법" 3단계를 자동화한 버전 |
+| `/verify` | `pytest` → `ruff check .` → `build_graph()` 스모크 테스트를 순서대로 실행하고 결과를 표로 요약. 커밋 전 로컬 검증용 |
+| `/inspect-thread <thread_id>` | `CHECKPOINTER_BACKEND=sqlite`로 저장된 `checkpoints.db`에서 특정 대화 기록을 디코딩해서 사람이 읽을 수 있게 출력 (원시 테이블은 직렬화된 바이너리라 sqlite CLI로 직접 못 읽음) |
+
+예시:
+```
+/add-tool weather "OpenWeather API로 현재 날씨를 조회하는 도구"
+/verify
+/inspect-thread 66538845-f816-435d-ac09-61fcdfb5a369
+```
 
 ## 나중에 Claude로 전환하는 법
 

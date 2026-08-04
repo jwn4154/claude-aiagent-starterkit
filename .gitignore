@@ -21,8 +21,9 @@ workspace/*
 .vscode/
 .idea/
 
-# Claude Code 로컬 전용 설정 (권한 승인 상태 등) — .claude/commands/는 공유 대상이라 여기 포함 안 함
+# Claude Code 로컬 전용 파일 (권한 승인 상태, 세션 lock 등) — .claude/commands/는 공유 대상이라 여기 포함 안 함
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Playwright MCP 테스트 산출물
 .playwright-mcp/
