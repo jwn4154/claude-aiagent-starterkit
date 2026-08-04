@@ -21,8 +21,10 @@ streamlit run app.py     # web UI
 
 ```bash
 pip install -r requirements-dev.txt
-pytest          # unit tests for src/tools (pure functions, no API key needed)
+pytest                                          # unit tests for src/tools (pure functions, no API key needed)
+pytest tests/test_calculator.py::test_basic_arithmetic -v   # run a single test
 ruff check .
+ruff check . --fix                              # auto-fix lint issues
 ```
 
 `.github/workflows/ci.yml` runs the same lint+test steps on push/PR.

@@ -6,6 +6,7 @@
 
 from src.tools.calculator import calculator
 from src.tools.file_tools import read_local_file
+from src.tools.time import get_current_time
 from src.tools.web_search import web_search
 
-ALL_TOOLS = [calculator, web_search, read_local_file]
+ALL_TOOLS = [calculator, web_search, read_local_file, get_current_time]
