@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Respond in Korean (한국어)** for all conversational replies, explanations, and commit messages in this repository — this applies whether you're running locally or as a cloud/Slack/mobile session. Code, identifiers, and technical terms stay in English as usual.
+
 ## What this is
 
 A minimal LangGraph + OpenAI agent starter kit, provided as both a CLI (`main.py`) and a Streamlit web UI (`app.py`). The repository name says "claude" but the current implementation defaults to the **OpenAI** provider — see the "나중에 Claude로 전환하는 법" section in README.md for the swap-back steps (replace `ChatOpenAI` with `ChatAnthropic` in `src/graph.py`).
@@ -47,11 +49,12 @@ call_model → (has tool_calls?) → tools → call_model → ... → END
 
 ## Tools (`src/tools/`)
 
-Three example tools are registered in `src/tools/__init__.py`'s `ALL_TOOLS` list, which `graph.py` binds to the model as-is:
+Four example tools are registered in `src/tools/__init__.py`'s `ALL_TOOLS` list, which `graph.py` binds to the model as-is:
 
 - `calculator` — arithmetic only, no external dependencies. Deliberately avoids `eval()`; parses expressions via `ast` and walks the tree against an operator whitelist.
 - `web_search` — calls the Tavily API. If `TAVILY_API_KEY` is unset, it returns a guidance string instead of raising, so the rest of the app keeps working without that key. The `tavily` import is deferred inside the function for the same reason.
 - `read_local_file` — reads files sandboxed to `WORKSPACE_DIR` (the `workspace/` directory). Validates paths by resolving them and checking `is_relative_to()`, not by string-prefix comparison, to block `../` traversal and symlink escapes.
+- `get_current_time` (`src/tools/time.py`) — no external dependencies. Returns the current time for an IANA timezone (default `Asia/Seoul`) using the standard-library `zoneinfo`; unknown timezone names return a guidance string instead of raising.
 
 **To add a new tool:** define a function with `@tool` in a new file under `src/tools/`, then import it and append it to `ALL_TOOLS` in `src/tools/__init__.py`. Nothing else needs to change — `graph.py` binds whatever is in `ALL_TOOLS`.
 
