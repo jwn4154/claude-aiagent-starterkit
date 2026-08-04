@@ -25,5 +25,8 @@ workspace/*
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Slack 웹훅 URL 등 hook 스크립트가 쓰는 비밀값 — .env.example만 커밋 대상
+.claude/hooks/.env
+
 # Playwright MCP 테스트 산출물
 .playwright-mcp/
